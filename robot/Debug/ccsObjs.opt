@@ -1,0 +1,1 @@
+"./ECE_4437_Lab3_VIRAY_KATRINA.obj" "./startup_ccs.obj" "../ECE_4437_Lab2_VIRAY_KATRINA_ccs.cmd" -llibc.a -l"C:/ti/tivaware_c_series-2.1.4.178/driverlib/ccs/Debug/driverlib.lib" 

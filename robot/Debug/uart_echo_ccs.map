@@ -1,0 +1,296 @@
+******************************************************************************
+                  TI ARM Linker PC v20.2.5                     
+******************************************************************************
+>> Linked Mon Sep  9 22:49:25 2024
+
+OUTPUT FILE NAME:   <ECE_4437_Lab3_VIRAY_KATRINA.out>
+ENTRY POINT SYMBOL: "_c_int00_noargs"  address: 00000869
+
+
+MEMORY CONFIGURATION
+
+         name            origin    length      used     unused   attr    fill
+----------------------  --------  ---------  --------  --------  ----  --------
+  FLASH                 00000000   00040000  00000b08  0003f4f8  R  X
+  SRAM                  20000000   00008000  00000108  00007ef8  RW X
+
+
+SEGMENT ALLOCATION MAP
+
+run origin  load origin   length   init length attrs members
+----------  ----------- ---------- ----------- ----- -------
+00000000    00000000    00000b08   00000b08    r-x
+  00000000    00000000    00000270   00000270    r-- .intvecs
+  00000270    00000270    000007b8   000007b8    r-x .text
+  00000a28    00000a28    000000b0   000000b0    r-- .const
+  00000ad8    00000ad8    00000030   00000030    r-- .cinit
+20000000    20000000    00000108   00000000    rw-
+  20000000    20000000    00000100   00000000    rw- .stack
+  20000100    20000100    00000004   00000000    rw- .bss
+  20000104    20000104    00000004   00000000    rw- .data
+
+
+SECTION ALLOCATION MAP
+
+ output                                  attributes/
+section   page    origin      length       input sections
+--------  ----  ----------  ----------   ----------------
+.intvecs   0    00000000    00000270     
+                  00000000    00000270     startup_ccs.obj (.intvecs)
+
+.text      0    00000270    000007b8     
+                  00000270    000002b8     ECE_4437_Lab3_VIRAY_KATRINA.obj (.text:main)
+                  00000528    0000009c     rtsv7M4_T_le_v4SPD16_eabi.lib : memcpy_t2.asm.obj (.text)
+                  000005c4    0000007a                                   : memset_t2.asm.obj (.text)
+                  0000063e    00000002     startup_ccs.obj (.text:FaultISR)
+                  00000640    00000068     ECE_4437_Lab3_VIRAY_KATRINA.obj (.text:UARTIntHandler)
+                  000006a8    00000068     rtsv7M4_T_le_v4SPD16_eabi.lib : copy_decompress_lzss.c.obj (.text:decompress:lzss:__TI_decompress_lzss)
+                  00000710    0000004c     ECE_4437_Lab3_VIRAY_KATRINA.obj (.text:UART1_IntHandler)
+                  0000075c    00000048     driverlib.lib : gpio.obj (.text:GPIOPinConfigure)
+                  000007a4    00000048     ECE_4437_Lab3_VIRAY_KATRINA.obj (.text:displayTerminal)
+                  000007ec    00000044     rtsv7M4_T_le_v4SPD16_eabi.lib : autoinit.c.obj (.text:__TI_auto_init_nobinit_nopinit:__TI_auto_init_nobinit_nopinit)
+                  00000830    00000038     driverlib.lib : sysctl.obj (.text:SysCtlPeripheralReady)
+                  00000868    00000034     rtsv7M4_T_le_v4SPD16_eabi.lib : boot_cortex_m.c.obj (.text:_c_int00_noargs:_c_int00_noargs)
+                  0000089c    0000002c                                   : strncmp.c.obj (.text:strncmp)
+                  000008c8    00000028     ECE_4437_Lab3_VIRAY_KATRINA.obj (.text:UARTSend)
+                  000008f0    00000027     ECE_4437_Lab3_VIRAY_KATRINA.obj (.text:BWD)
+                  00000917    00000001     --HOLE-- [fill = 0]
+                  00000918    00000026     ECE_4437_Lab3_VIRAY_KATRINA.obj (.text:FWD)
+                  0000093e    00000002     startup_ccs.obj (.text:IntDefaultHandler)
+                  00000940    00000024     ECE_4437_Lab3_VIRAY_KATRINA.obj (.text:RGT)
+                  00000964    00000023     ECE_4437_Lab3_VIRAY_KATRINA.obj (.text:LFT)
+                  00000987    00000001     --HOLE-- [fill = 0]
+                  00000988    0000001c     ECE_4437_Lab3_VIRAY_KATRINA.obj (.text:UART1_Send)
+                  000009a4    0000001c     rtsv7M4_T_le_v4SPD16_eabi.lib : copy_zero_init.c.obj (.text:decompress:ZI:__TI_zero_init_nomemset:__TI_zero_init_nomemset)
+                  000009c0    00000014                                   : strlen.c.obj (.text:strlen)
+                  000009d4    0000000e     driverlib.lib : uart.obj (.text:UARTCharsAvail)
+                  000009e2    0000000e     rtsv7M4_T_le_v4SPD16_eabi.lib : copy_decompress_none.c.obj (.text:decompress:none:__TI_decompress_none)
+                  000009f0    0000000a     driverlib.lib : uart.obj (.text:UARTCharGet)
+                  000009fa    0000000a                   : uart.obj (.text:UARTCharPut)
+                  00000a04    0000000a                   : uart.obj (.text:UARTIntStatus)
+                  00000a0e    00000006                   : gpio.obj (.text:GPIOPinWrite)
+                  00000a14    00000006     startup_ccs.obj (.text:ResetISR)
+                  00000a1a    00000004     driverlib.lib : uart.obj (.text:UARTIntClear)
+                  00000a1e    00000004     rtsv7M4_T_le_v4SPD16_eabi.lib : pre_init.c.obj (.text:_system_pre_init)
+                  00000a22    00000004                                   : exit.c.obj (.text:abort:abort)
+                  00000a26    00000002     startup_ccs.obj (.text:NmiSR)
+
+.const     0    00000a28    000000b0     
+                  00000a28    00000090     driverlib.lib : gpio.obj (.const:g_pui32GPIOBaseAddrs)
+                  00000ab8    00000020     ECE_4437_Lab3_VIRAY_KATRINA.obj (.const:cmdLookUp)
+
+.cinit     0    00000ad8    00000030     
+                  00000ad8    0000000c     (__TI_handler_table)
+                  00000ae4    00000004     --HOLE-- [fill = 0]
+                  00000ae8    00000008     (.cinit..bss.load) [load image, compression = zero_init]
+                  00000af0    00000007     (.cinit..data.load) [load image, compression = lzss]
+                  00000af7    00000001     --HOLE-- [fill = 0]
+                  00000af8    00000010     (__TI_cinit_table)
+
+.init_array 
+*          0    00000000    00000000     UNINITIALIZED
+
+.bss       0    20000100    00000004     UNINITIALIZED
+                  20000100    00000004     (.common:inputStr)
+
+.data      0    20000104    00000004     UNINITIALIZED
+                  20000104    00000004     ECE_4437_Lab3_VIRAY_KATRINA.obj (.data)
+
+.stack     0    20000000    00000100     UNINITIALIZED
+                  20000000    00000004     rtsv7M4_T_le_v4SPD16_eabi.lib : boot_cortex_m.c.obj (.stack)
+                  20000004    000000fc     --HOLE--
+
+__llvm_prf_cnts 
+*          0    20000000    00000000     UNINITIALIZED
+
+MODULE SUMMARY
+
+       Module                            code   ro data   rw data
+       ------                            ----   -------   -------
+    .\
+       ECE_4437_Lab3_VIRAY_KATRINA.obj   1164   32        8      
+       startup_ccs.obj                   12     624       0      
+    +--+---------------------------------+------+---------+---------+
+       Total:                            1176   656       8      
+                                                                 
+    C:/ti/tivaware_c_series-2.1.4.178/driverlib/ccs/Debug/driverlib.lib
+       gpio.obj                          78     144       0      
+       sysctl.obj                        56     0         0      
+       uart.obj                          48     0         0      
+    +--+---------------------------------+------+---------+---------+
+       Total:                            182    144       0      
+                                                                 
+    C:\ti\ccs1040\ccs\tools\compiler\ti-cgt-arm_20.2.5.LTS\lib\rtsv7M4_T_le_v4SPD16_eabi.lib
+       memcpy_t2.asm.obj                 156    0         0      
+       memset_t2.asm.obj                 122    0         0      
+       copy_decompress_lzss.c.obj        104    0         0      
+       autoinit.c.obj                    68     0         0      
+       boot_cortex_m.c.obj               52     0         0      
+       strncmp.c.obj                     44     0         0      
+       copy_zero_init.c.obj              28     0         0      
+       strlen.c.obj                      20     0         0      
+       copy_decompress_none.c.obj        14     0         0      
+       exit.c.obj                        4      0         0      
+       pre_init.c.obj                    4      0         0      
+    +--+---------------------------------+------+---------+---------+
+       Total:                            616    0         0      
+                                                                 
+       Stack:                            0      0         256    
+       Linker Generated:                 0      43        0      
+    +--+---------------------------------+------+---------+---------+
+       Grand Total:                      1974   843       264    
+
+
+LINKER GENERATED COPY TABLES
+
+__TI_cinit_table @ 00000af8 records: 2, size/record: 8, table size: 16
+	.bss: load addr=00000ae8, load size=00000008 bytes, run addr=20000100, run size=00000004 bytes, compression=zero_init
+	.data: load addr=00000af0, load size=00000007 bytes, run addr=20000104, run size=00000004 bytes, compression=lzss
+
+
+LINKER GENERATED HANDLER TABLE
+
+__TI_handler_table @ 00000ad8 records: 3, size/record: 4, table size: 12
+	index: 0, handler: __TI_decompress_lzss
+	index: 1, handler: __TI_decompress_none
+	index: 2, handler: __TI_zero_init
+
+
+GLOBAL SYMBOLS: SORTED ALPHABETICALLY BY Name 
+
+address   name                          
+-------   ----                          
+000008f1  BWD                           
+00000a23  C$$EXIT                       
+00000919  FWD                           
+0000075d  GPIOPinConfigure              
+00000a0f  GPIOPinWrite                  
+00000965  LFT                           
+00000941  RGT                           
+00000a15  ResetISR                      
+00000831  SysCtlPeripheralReady         
+00000711  UART1_IntHandler              
+00000989  UART1_Send                    
+000009f1  UARTCharGet                   
+000009fb  UARTCharPut                   
+000009d5  UARTCharsAvail                
+00000a1b  UARTIntClear                  
+00000641  UARTIntHandler                
+00000a05  UARTIntStatus                 
+000008c9  UARTSend                      
+20000100  __STACK_END                   
+00000100  __STACK_SIZE                  
+20000100  __STACK_TOP                   
+00000af8  __TI_CINIT_Base               
+00000b08  __TI_CINIT_Limit              
+00000ad8  __TI_Handler_Table_Base       
+00000ae4  __TI_Handler_Table_Limit      
+000007ed  __TI_auto_init_nobinit_nopinit
+000006a9  __TI_decompress_lzss          
+000009e3  __TI_decompress_none          
+ffffffff  __TI_pprof_out_hndl           
+ffffffff  __TI_prof_data_size           
+ffffffff  __TI_prof_data_start          
+00000000  __TI_static_base__            
+000009a5  __TI_zero_init_nomemset       
+000005c5  __aeabi_memclr                
+000005c5  __aeabi_memclr4               
+000005c5  __aeabi_memclr8               
+00000529  __aeabi_memcpy                
+00000529  __aeabi_memcpy4               
+00000529  __aeabi_memcpy8               
+000005c7  __aeabi_memset                
+000005c7  __aeabi_memset4               
+000005c7  __aeabi_memset8               
+ffffffff  __binit__                     
+ffffffff  __c_args__                    
+UNDEFED   __mpu_init                    
+20000000  __stack                       
+20000000  __start___llvm_prf_cnts       
+20000000  __stop___llvm_prf_cnts        
+00000869  _c_int00_noargs               
+UNDEFED   _system_post_cinit            
+00000a1f  _system_pre_init              
+00000a23  abort                         
+ffffffff  binit                         
+00000ab8  cmdLookUp                     
+20000104  count                         
+000007a5  displayTerminal               
+00000000  g_pfnVectors                  
+20000100  inputStr                      
+00000271  main                          
+00000529  memcpy                        
+000005cd  memset                        
+000009c1  strlen                        
+0000089d  strncmp                       
+
+
+GLOBAL SYMBOLS: SORTED BY Symbol Address 
+
+address   name                          
+-------   ----                          
+00000000  __TI_static_base__            
+00000000  g_pfnVectors                  
+00000100  __STACK_SIZE                  
+00000271  main                          
+00000529  __aeabi_memcpy                
+00000529  __aeabi_memcpy4               
+00000529  __aeabi_memcpy8               
+00000529  memcpy                        
+000005c5  __aeabi_memclr                
+000005c5  __aeabi_memclr4               
+000005c5  __aeabi_memclr8               
+000005c7  __aeabi_memset                
+000005c7  __aeabi_memset4               
+000005c7  __aeabi_memset8               
+000005cd  memset                        
+00000641  UARTIntHandler                
+000006a9  __TI_decompress_lzss          
+00000711  UART1_IntHandler              
+0000075d  GPIOPinConfigure              
+000007a5  displayTerminal               
+000007ed  __TI_auto_init_nobinit_nopinit
+00000831  SysCtlPeripheralReady         
+00000869  _c_int00_noargs               
+0000089d  strncmp                       
+000008c9  UARTSend                      
+000008f1  BWD                           
+00000919  FWD                           
+00000941  RGT                           
+00000965  LFT                           
+00000989  UART1_Send                    
+000009a5  __TI_zero_init_nomemset       
+000009c1  strlen                        
+000009d5  UARTCharsAvail                
+000009e3  __TI_decompress_none          
+000009f1  UARTCharGet                   
+000009fb  UARTCharPut                   
+00000a05  UARTIntStatus                 
+00000a0f  GPIOPinWrite                  
+00000a15  ResetISR                      
+00000a1b  UARTIntClear                  
+00000a1f  _system_pre_init              
+00000a23  C$$EXIT                       
+00000a23  abort                         
+00000ab8  cmdLookUp                     
+00000ad8  __TI_Handler_Table_Base       
+00000ae4  __TI_Handler_Table_Limit      
+00000af8  __TI_CINIT_Base               
+00000b08  __TI_CINIT_Limit              
+20000000  __stack                       
+20000000  __start___llvm_prf_cnts       
+20000000  __stop___llvm_prf_cnts        
+20000100  __STACK_END                   
+20000100  __STACK_TOP                   
+20000100  inputStr                      
+20000104  count                         
+ffffffff  __TI_pprof_out_hndl           
+ffffffff  __TI_prof_data_size           
+ffffffff  __TI_prof_data_start          
+ffffffff  __binit__                     
+ffffffff  __c_args__                    
+ffffffff  binit                         
+UNDEFED   __mpu_init                    
+UNDEFED   _system_post_cinit            
+
+[63 symbols]
