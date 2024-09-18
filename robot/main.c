@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include "inc/hw_ints.h"
+#include "inc/hw_types.h"
 #include "inc/hw_memmap.h"
 #include "driverlib/debug.h"
 #include "driverlib/fpu.h"
@@ -9,8 +10,9 @@
 #include "driverlib/interrupt.h"
 #include "driverlib/pin_map.h"
 #include "driverlib/rom.h"
-#include "driverlib/sysctl.h"
+#include "driverlib/sysctl.h"s
 #include "driverlib/uart.h"
+#include "driverlib/pwm.h"
 #include <stdbool.h>
 //#include "utils/uartstdio.h"
 
@@ -31,8 +33,8 @@ void __error__(char *pcFilename, uint32_t ui32Line) {}
 int count = 0;
 char inputStr[4];
 uint32_t PWM_clock, PWM_freq, Load, i;
-uint32_t ADCVaql[4];
-uint32_t ADCAvVal;
+//uint32_t ADCVaql[4];
+//uint32_t ADCAvVal;
 
 void FWD(void);
 void BWD(void);
@@ -135,6 +137,7 @@ void ADCSeq_IntHandler(void){
 //
 //*****************************************************************************
 void displayTerminal(){
+    /*
     GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, 0);
     switch (count % 3)
     {
@@ -150,6 +153,7 @@ void displayTerminal(){
     }
     // Increment character count.
     count++;
+    */
 }
 
 //*****************************************************************************
@@ -182,7 +186,7 @@ void UART1_Send(const uint8_t *pui8Buffer, uint32_t ui32Count)
 // UART Setup
 //
 //*****************************************************************************
-int UART_init(void){
+void UART_init(void){
     // Enable the peripherals used by this example.
     ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
     ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
@@ -240,41 +244,44 @@ int UART_init(void){
 //
 //*****************************************************************************
 void PWM_init(void){
+  // Set the PWM clock divider to 64
   SysCtlPWMClockSet(SYSCTL_PWMDIV_64);
 
+  // Enable PWM module 1
   SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM1);
 
+  // Wait until the PWM1 module is ready
   while(!SysCtlPeripheralReady(SYSCTL_PERIPH_PWM1)) {};
 
-  // Enable GPIO port used for on-board LED
+  // Enable GPIO port F used for on-board LED (PF1)
   SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
   while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF)) {};
 
-  // Generator 2 --> PWM6 or PWM7
+  // Configure PF1 for PWM output (M1PWM5)
   GPIOPinConfigure(GPIO_PF1_M1PWM5);
   GPIOPinTypePWM(GPIO_PORTF_BASE, GPIO_PIN_1);
 
   // Divide by 64 since SYSCTL_PWMDIV_64 was used
-  PWM_clock = SysCtlClockGet() / 64;
-  PWM_freq = 50;
-  Load = (PWM_clock / PWM_freq) - 1;
+  uint32_t PWM_clock = SysCtlClockGet() / 64;
+  uint32_t PWM_freq = 1000; // 1000 Hz
+  uint32_t Load = (PWM_clock / PWM_freq) - 1;
 
+  // Set the period for PWM generator 2 (which controls M1PWM5)
   PWMGenPeriodSet(PWM1_BASE, PWM_GEN_2, Load);
 
-  // Configure PWM mode
+  // Configure PWM generator 2 for down-count mode and no synchronization
   PWMGenConfigure(PWM1_BASE, PWM_GEN_2, PWM_GEN_MODE_DOWN | PWM_GEN_MODE_NO_SYNC);
+
+  // Enable PWM generator 2
   PWMGenEnable(PWM1_BASE, PWM_GEN_2);
 
-  // Set PWM pulse width to 50% duty cycle
-  PWMPulseWidthSet(PWM1_BASE, PWM_OUT_5, Load / 2);
+  // Set initial PWM pulse width to 0% duty cycle (LED off)
+  PWMPulseWidthSet(PWM1_BASE, PWM_OUT_5, 0);
 
-  // Set PWM output state
+  // Enable PWM output on M1PWM5 (PF1)
   PWMOutputState(PWM1_BASE, PWM_OUT_5_BIT, true);
-  //PWMOutputState(PWM1_BASE, PWM_OUT_5_BIT, false);
-
-  // Enable PWM generator
-  //PWMGenEnable(PWM1_BASE, PWM_GEN_1);
 }
+
 
 //*****************************************************************************
 //
@@ -291,8 +298,11 @@ int main(void)
     //ROM_SysCtlClockSet(SYSCTL_SYSDIV_1 | SYSCTL_USE_OSC | SYSCTL_OSC_MAIN |
     //                   SYSCTL_XTAL_40MHZ);
 
+    UART_init();
+    PWM_init();
+
     // Enable the GPIO pins for the LEDs (PF1 to PF3).
-    ROM_GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3);
+    //ROM_GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3);
 
     // maybe delete
     if(!SysCtlPeripheralReady(SYSCTL_PERIPH_PWM1));
@@ -300,7 +310,7 @@ int main(void)
     }
 
     // Set initial LED state to red.
-    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_PIN_1);
+    //GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_PIN_1);
 
     // Prompt for text to be entered.
     UARTSend((uint8_t *)"Please enter characters in the remote Bluetooth Serial Terminal and see the color change: ", 90);
@@ -358,30 +368,33 @@ int main(void)
         UART1_Send((uint8_t *)"Move Right\n", 12);
     }
 
-    void PWM(void){
+    void PWM(void)
+    {
         UARTSend((uint8_t *)"PWM of LED\n", 11);
         UART1_Send((uint8_t *)"PWM of LED\n", 11);
 
-        int step = 1; // Adjust step size if necessary
-        int dutyCycle = PWMGenPeriodGet(PWM1_BASE, PWM_GEN_3) / 2; // 50% to start
+        uint32_t period = PWMGenPeriodGet(PWM1_BASE, PWM_GEN_2);
+        uint32_t dutyCycle = 0;
+        uint32_t step = 1;
+        uint32_t delayFactor = 1000;
 
-        while(1) {
-            // Increase duty cycle
-            while (dutyCycle <= PWMGenPeriodGet(PWM1_BASE, PWM_GEN_3)) {
-                PWMPulseWidthSet(PWM1_BASE, PWM_OUT_6, dutyCycle);
-                dutyCycle += step;
-                SysCtlDelay(100000);  // Adjust delay for smooth transition
+        while(1)
+        {
+            // Ramp up
+            for (dutyCycle = 0; dutyCycle < period; dutyCycle += step)
+            {
+                PWMPulseWidthSet(PWM1_BASE, PWM_OUT_5, dutyCycle);
+                SysCtlDelay(SysCtlClockGet() / delayFactor);
             }
 
-            // Decrease duty cycle
-            while (dutyCycle > 0) {
-                PWMPulseWidthSet(PWM1_BASE, PWM_OUT_6, dutyCycle);
-                dutyCycle -= step;
-                SysCtlDelay(100000);  // Adjust delay for smooth transition
+            // Ramp down
+            for (dutyCycle = period; dutyCycle > 0; dutyCycle -= step)
+            {
+                PWMPulseWidthSet(PWM1_BASE, PWM_OUT_5, dutyCycle);
+                SysCtlDelay(SysCtlClockGet() / delayFactor);
             }
         }
     }
-
     /*
     void ADC(void){
         UARTSend((uint8_t *)"Move Right\n", 12);
