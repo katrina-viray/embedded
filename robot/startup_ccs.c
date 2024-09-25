@@ -58,6 +58,7 @@ extern uint32_t __STACK_TOP;
 //*****************************************************************************
 extern void UARTIntHandler(void);
 extern void UART1_IntHandler(void);
+extern void ADCSeq_IntHandler(void);
 
 //*****************************************************************************
 //
@@ -93,6 +94,7 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // GPIO Port E
     UARTIntHandler,                         // UART0 Rx and Tx
     UART1_IntHandler,                       // UART1 Rx and Tx
+    ADCSeq_IntHandler,                      // ADC Sequence 3
     IntDefaultHandler,                      // UART1 Rx and Tx
     IntDefaultHandler,                      // SSI0 Rx and Tx
     IntDefaultHandler,                      // I2C0 Master and Slave

@@ -10,11 +10,12 @@
 #include "driverlib/interrupt.h"
 #include "driverlib/pin_map.h"
 #include "driverlib/rom.h"
-#include "driverlib/sysctl.h"s
+#include "driverlib/sysctl.h"
 #include "driverlib/uart.h"
 #include "driverlib/pwm.h"
+#include "driverlib/adc.h"
 #include <stdbool.h>
-//#include "utils/uartstdio.h"
+#include "utils/uartstdio.h"
 
 //*****************************************************************************
 //
@@ -33,15 +34,19 @@ void __error__(char *pcFilename, uint32_t ui32Line) {}
 int count = 0;
 char inputStr[4];
 uint32_t PWM_clock, PWM_freq, Load, i;
-//uint32_t ADCVaql[4];
-//uint32_t ADCAvVal;
+uint32_t ADCVal[4];
+uint32_t ADAvVal;
+uint32_t Int_status, ADC0_Val;
+float distance, volts;
 
 void FWD(void);
 void BWD(void);
 void LFT(void);
 void RGT(void);
 void PWM(void);
-//void ADC(void);
+void ADC_req(void);
+void ADC_int(void);
+
 
 typedef struct{
     char cmd [4];
@@ -54,7 +59,7 @@ const Cmd cmdLookUp[] = {
      {"lft", LFT},
      {"rgt", RGT},
      {"pwm", PWM},
-     //{"adc", ADC}
+     {"req", ADC_req}
 };
 
 void displayTerminal(void);
@@ -122,14 +127,27 @@ void UART1_IntHandler(void)
 // Sequential ADC Interrupt Handler
 //
 //*****************************************************************************
-/*
 void ADCSeq_IntHandler(void){
   // Clear interrupt flag for ADC Sequence 1
-  ADCIntClear(ADC0_BASE, 1);
+  ADCIntClear(ADC0_BASE, 3);
   ADCSequenceDataGet(ADC0_BASE, 3, &ADCAvVal);
-  ADCIntEnable(ADC0_BASE, 1);
+
+  volts = ADCAvVal * (3.3/4096);
+  distance = 13.68/volts;
+
+  ADCIntEnable(ADC0_BASE, 3);
+
+  if(distance < 6){ // red
+    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, GPIO_PIN_1);
+  }
+  else if (distance < 10){ // yellow
+    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, GPIO_PIN_3 | GPIO_PIN_1);
+  }
+  if (distance >= 10){ // green
+    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, GPIO_PIN_3);
+  }
 }
-*/
+
 
 //*****************************************************************************
 //
@@ -282,6 +300,32 @@ void PWM_init(void){
   PWMOutputState(PWM1_BASE, PWM_OUT_5_BIT, true);
 }
 
+//*****************************************************************************
+//
+// ADC Setup
+//
+//*****************************************************************************
+void ADC_init(void){
+  SysCtlPeripheralReady(SYSCTL_PERIPH_ADC0);
+  while(!SysCtlPeripheralReady(SYSCTL_PERIPH_ADC0)) {};
+
+  SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
+  while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE)) {};
+
+  SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
+  while(!SysCtlPeripheralReady(SYSCTL_PERI(H_GPIOF))) {};
+
+  GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3);
+
+  GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_2);
+  ADCSequenceDisable(ADC0_BASE, 3);
+  ADCSequenceConfigure(ADC0_BASE, 3, TRIGGER_PROCESSOR, 0);
+  ADCSequenceStepCOnfigure(ADC0_BASE, 3, 0, ADC_CTL_IE | ADC_CTL_END | ADC_CTL_CH1);
+  ADCSequenceEnable(ADC0_BASE, 3);
+  ADCIntEnable(ADC0_BASE, 3);
+  ADCIntRegister(ADC0_BASE, 3, &ADCSeq_IntHandler);
+
+}
 
 //*****************************************************************************
 //
@@ -299,7 +343,8 @@ int main(void)
     //                   SYSCTL_XTAL_40MHZ);
 
     UART_init();
-    PWM_init();
+    // PWM_init();
+    ADC_init();
 
     // Enable the GPIO pins for the LEDs (PF1 to PF3).
     //ROM_GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3);
@@ -395,9 +440,14 @@ int main(void)
             }
         }
     }
-    /*
-    void ADC(void){
-        UARTSend((uint8_t *)"Move Right\n", 12);
-        UART1_Send((uint8_t *)"Move Right\n", 12);
+
+    void ADC_req(void){
+      ADCProcessorTrigger(ADC0_BASE, 3);
     }
-    */
+
+    void ADC_int(void){
+      Int_status = ADCIntStatus(ADC0_BASE, 3, false);
+      ADCSequenceDataGet(ADC0_BASE, 3, &ADC0_Val);
+      UARTprintf("Value read from ADC0 Seq3 is %n", ADC0_Val);
+      ADCIntClear(ADC0_BASE, 3);
+    }
