@@ -35,7 +35,7 @@ int count = 0;
 char inputStr[4];
 uint32_t PWM_clock, PWM_freq, Load, i;
 uint32_t ADCVal[4];
-uint32_t ADAvVal;
+uint32_t ADCAvVal;
 uint32_t Int_status, ADC0_Val;
 float distance, volts;
 
@@ -128,12 +128,24 @@ void UART1_IntHandler(void)
 //
 //*****************************************************************************
 void ADCSeq_IntHandler(void){
+
   // Clear interrupt flag for ADC Sequence 1
   ADCIntClear(ADC0_BASE, 3);
   ADCSequenceDataGet(ADC0_BASE, 3, &ADCAvVal);
 
   volts = ADCAvVal * (3.3/4096);
   distance = 13.68/volts;
+
+      /*
+  // Buffer to hold the formatted string
+  char buffer[100];
+
+  // Format the string using snprintf (similar to UARTprintf)
+  snprintf(buffer, sizeof(buffer), "Distance: %d cm\n", (int)distance);
+
+  // Send the formatted string using UARTSend
+  UARTSend((uint8_t *)buffer, strlen(buffer));
+  */
 
   ADCIntEnable(ADC0_BASE, 3);
 
@@ -306,26 +318,41 @@ void PWM_init(void){
 //
 //*****************************************************************************
 void ADC_init(void){
-  SysCtlPeripheralReady(SYSCTL_PERIPH_ADC0);
+  // Enable the ADC peripheral
+  SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC0);
+
+  // Wait for the ADC module to be ready
   while(!SysCtlPeripheralReady(SYSCTL_PERIPH_ADC0)) {};
 
+  // Enable GPIO Port E
   SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
   while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE)) {};
 
+  // Enable GPIO Port F for LEDs
   SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
-  while(!SysCtlPeripheralReady(SYSCTL_PERI(H_GPIOF))) {};
+  while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF)) {};
 
   GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3);
 
-  GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_2);
+  // Configure PE3 as ADC input (AIN0)
+  GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_3);
+
+  // Disable ADC Sequence 3 before configuring
   ADCSequenceDisable(ADC0_BASE, 3);
-  ADCSequenceConfigure(ADC0_BASE, 3, TRIGGER_PROCESSOR, 0);
-  ADCSequenceStepCOnfigure(ADC0_BASE, 3, 0, ADC_CTL_IE | ADC_CTL_END | ADC_CTL_CH1);
+
+  // Configure ADC Sequence 3
+  ADCSequenceConfigure(ADC0_BASE, 3, ADC_TRIGGER_PROCESSOR, 0);
+  ADCSequenceStepConfigure(ADC0_BASE, 3, 0, ADC_CTL_IE | ADC_CTL_END | ADC_CTL_CH0);
+
+  // Enable ADC Sequence 3
   ADCSequenceEnable(ADC0_BASE, 3);
+
+  // Enable ADC interrupt for Sequence 3
   ADCIntEnable(ADC0_BASE, 3);
   ADCIntRegister(ADC0_BASE, 3, &ADCSeq_IntHandler);
-
 }
+
+
 
 //*****************************************************************************
 //
@@ -443,11 +470,4 @@ int main(void)
 
     void ADC_req(void){
       ADCProcessorTrigger(ADC0_BASE, 3);
-    }
-
-    void ADC_int(void){
-      Int_status = ADCIntStatus(ADC0_BASE, 3, false);
-      ADCSequenceDataGet(ADC0_BASE, 3, &ADC0_Val);
-      UARTprintf("Value read from ADC0 Seq3 is %n", ADC0_Val);
-      ADCIntClear(ADC0_BASE, 3);
     }
