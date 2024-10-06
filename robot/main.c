@@ -1,473 +1,172 @@
-#include <stdint.h>
+/* XDCtools Header files */
+#include <xdc/std.h>
+#include <xdc/runtime/System.h>
+
+/* BIOS Header files */
+#include <ti/sysbios/BIOS.h>
+#include <ti/sysbios/knl/Semaphore.h>
+#include <ti/sysbios/knl/Task.h>
+#include <ti/sysbios/knl/Swi.h>
+
+/* TI-RTOS Header files */
+#include <ti/drivers/GPIO.h>
+
+/* Standard C libraries */
 #include <stdbool.h>
+#include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
-#include "inc/hw_ints.h"
-#include "inc/hw_types.h"
-#include "inc/hw_memmap.h"
-#include "driverlib/debug.h"
-#include "driverlib/fpu.h"
+#include <math.h>
+
+/* Driverlib and hardware specific includes */
+#include "driverlib/adc.h"
 #include "driverlib/gpio.h"
 #include "driverlib/interrupt.h"
 #include "driverlib/pin_map.h"
-#include "driverlib/rom.h"
 #include "driverlib/sysctl.h"
+#include "driverlib/systick.h"
 #include "driverlib/uart.h"
 #include "driverlib/pwm.h"
-#include "driverlib/adc.h"
-#include <stdbool.h>
+#include "driverlib/timer.h"
+#include "driverlib/fpu.h"
+#include "inc/hw_memmap.h"
+#include "inc/hw_types.h"
+#include "inc/hw_ints.h"
 #include "utils/uartstdio.h"
 
-//*****************************************************************************
-//
-// The error routine that is called if the driver library encounters an error.
-//
-//*****************************************************************************
-#ifdef DEBUG
-void __error__(char *pcFilename, uint32_t ui32Line) {}
-#endif
+extern ti_sysbios_knl_Semaphore_Handle Task0Semaphore;
+volatile uint64_t startCount;
+volatile uint64_t endCount;
 
-//*****************************************************************************
-//
-// Global variables
-//
-//*****************************************************************************
-int count = 0;
-char inputStr[4];
-uint32_t PWM_clock, PWM_freq, Load, i;
-uint32_t ADCVal[4];
-uint32_t ADCAvVal;
-uint32_t Int_status, ADC0_Val;
-float distance, volts;
+int lineCounter = 0;  // Keeps track of the number of thin lines detected
 
-void FWD(void);
-void BWD(void);
-void LFT(void);
-void RGT(void);
-void PWM(void);
-void ADC_req(void);
-void ADC_int(void);
+// Function Prototypes
+void EnablePeripherals();
+void InitializeUART0LocalTerminal();
+void InitializeTimer1();
+void GPIOAIntHandler();
+void Task0Func();
+void StopRobot();
 
+// Set the PWM duty cycle to 0 to stop the robot
+void StopRobot() {
+    // Assuming PWM module is set up, you would set the duty cycle to 0 like this:
+    PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, false);  // Stop PWM output
+}
 
-typedef struct{
-    char cmd [4];
-    void (*fp)(void);
-} Cmd;
+// Interrupt handler for Timer1
+void WTimer1IntHandler() {
+    TimerIntClear(WTIMER1_BASE, TIMER_TIMA_TIMEOUT);
+    UARTprintf("Timer Interrupt Triggered\n");
+    Semaphore_post(Task0Semaphore);
+}
 
-const Cmd cmdLookUp[] = {
-     {"fwd", FWD},
-     {"bwd", BWD},
-     {"lft", LFT},
-     {"rgt", RGT},
-     {"pwm", PWM},
-     {"req", ADC_req}
-};
+// Interrupt handler for GPIOA (Reflectance Sensor Input)
+void GPIOAIntHandler() {
+    GPIOIntClear(GPIO_PORTA_BASE, GPIO_INT_PIN_4);  // Clear interrupt flag
+    endCount = TimerValueGet(WTIMER0_BASE, TIMER_A);  // Capture end timer value
 
-void displayTerminal(void);
+    uint64_t elapsedCount = endCount - startCount;
+    UARTprintf("Decay Count Ticks: %i\n", (int)elapsedCount);
 
-//*****************************************************************************
-//
-// UART0 interrupt handler.
-//
-//*****************************************************************************
-void UARTIntHandler(void)
-{
-    uint32_t ui32Status;
-    char c;
+    // Use elapsed time to determine whether the sensor detected a black line (thin or thick)
+    if (elapsedCount > 40000) {
+        UARTprintf("On a dark surface\n");
 
-    // Get the interrupt status.
-    ui32Status = ROM_UARTIntStatus(UART0_BASE, true);
+        // Check if it's a thick black line (stop the robot)
+        if (elapsedCount > 60000) {  // Threshold for thick black line (adjust if necessary)
+            GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1, 0x02);  // Turn on RED LED
+            StopRobot();  // Stop the robot
+        } else {  // Thin black line detected
+            lineCounter++;
+            if (lineCounter == 1) {
+                GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, 0x08);  // Turn on GREEN LED
+            } else if (lineCounter == 2) {
+                GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_2, 0x04);  // Turn on BLUE LED
+            }
+        }
 
-    // Clear the asserted interrupts.
-    ROM_UARTIntClear(UART0_BASE, ui32Status);
-
-    // Loop while there are characters in the receive FIFO.
-    while(ROM_UARTCharsAvail(UART0_BASE))
-    {
-        // Read the next character from the UART.
-        c = ROM_UARTCharGet(UART0_BASE);
-
-        // Echo the character back to the UART0.
-        ROM_UARTCharPut(UART0_BASE, c);
-        ROM_UARTCharPut(UART1_BASE, c);
-
-        displayTerminal();
+    } else {
+        UARTprintf("On a white surface\n");
     }
 }
 
-//*****************************************************************************
-//
-// UART1 interrupt handler.
-//
-//*****************************************************************************
-void UART1_IntHandler(void)
-{
-    uint32_t ui32Status;
-    uint8_t c;
-
-    // Get the interrupt status.
-    ui32Status = UARTIntStatus(UART1_BASE, true);
-
-    // Clear the asserted interrupts.
-    UARTIntClear(UART1_BASE, ui32Status);
-
-    // Loop while there are characters in the receive FIFO.
-    while(UARTCharsAvail(UART1_BASE))
-    {
-        c = UARTCharGet(UART1_BASE);
-
-        //Read next character from the UART and write it back to the UART
-        UARTCharPut(UART0_BASE, c);
-
-        displayTerminal();
-        inputStr[strlen(inputStr)] = c;
-    }
-}
-//*****************************************************************************
-//
-// Sequential ADC Interrupt Handler
-//
-//*****************************************************************************
-void ADCSeq_IntHandler(void){
-
-  // Clear interrupt flag for ADC Sequence 1
-  ADCIntClear(ADC0_BASE, 3);
-  ADCSequenceDataGet(ADC0_BASE, 3, &ADCAvVal);
-
-  volts = ADCAvVal * (3.3/4096);
-  distance = 13.68/volts;
-
-      /*
-  // Buffer to hold the formatted string
-  char buffer[100];
-
-  // Format the string using snprintf (similar to UARTprintf)
-  snprintf(buffer, sizeof(buffer), "Distance: %d cm\n", (int)distance);
-
-  // Send the formatted string using UARTSend
-  UARTSend((uint8_t *)buffer, strlen(buffer));
-  */
-
-  ADCIntEnable(ADC0_BASE, 3);
-
-  if(distance < 6){ // red
-    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, GPIO_PIN_1);
-  }
-  else if (distance < 10){ // yellow
-    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, GPIO_PIN_3 | GPIO_PIN_1);
-  }
-  if (distance >= 10){ // green
-    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, GPIO_PIN_3);
-  }
-}
-
-
-//*****************************************************************************
-//
-// Change LED color based on the character count.
-//
-//*****************************************************************************
-void displayTerminal(){
-    /*
-    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3, 0);
-    switch (count % 3)
-    {
-        case 0:
-            GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_2, GPIO_PIN_2); // Blue
-            break;
-        case 1:
-            GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_PIN_1); // Red
-            break;
-        case 2:
-            GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, GPIO_PIN_3); // Green
-            break;
-    }
-    // Increment character count.
-    count++;
-    */
-}
-
-//*****************************************************************************
-//
-// Send a string to the UART.
-//
-//*****************************************************************************
-void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count)
-{
-    while(ui32Count--)
-    {
-        ROM_UARTCharPut(UART0_BASE, *pui8Buffer++);
+// Main Task function
+void Task0Func() {
+    while (1) {
+        Semaphore_pend(Task0Semaphore, BIOS_WAIT_FOREVER);
+        GPIOPinTypeGPIOOutput(GPIO_PORTA_BASE, GPIO_PIN_4);  // Set PA4 as output
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_4, GPIO_PIN_4);  // Write high
+        SysCtlDelay(SysCtlClockGet() / 3 * 10 * 1.0 / 1000000);  // Delay
+        GPIOPinTypeGPIOInput(GPIO_PORTA_BASE, GPIO_PIN_4);  // Set PA4 as input
+        startCount = TimerValueGet(WTIMER0_BASE, TIMER_A);  // Capture start timer value
     }
 }
 
-//*****************************************************************************
-//
-// Send a string to UART1.
-//
-//*****************************************************************************
-void UART1_Send(const uint8_t *pui8Buffer, uint32_t ui32Count)
-{
-    while(ui32Count--)
-    {
-        UARTCharPut(UART1_BASE, *pui8Buffer++);
-    }
+// Enable necessary peripherals
+void EnablePeripherals() {
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);  // Enable Port F for LEDs
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_WTIMER0);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_WTIMER1);
 }
-//*****************************************************************************
-//
-// UART Setup
-//
-//*****************************************************************************
-void UART_init(void){
-    // Enable the peripherals used by this example.
-    ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
-    ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
-    ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART1);
-    ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
-    ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM1);
-    ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
 
-    if(!SysCtlPeripheralReady(SYSCTL_PERIPH_UART1));
-    {
-    }
-
-    // Set frequency of clock feeding the PWM module.
-    ROM_SysCtlPWMClockSet(SYSCTL_PWMDIV_64);
-
-    // Enable processor interrupts.
-    ROM_IntMasterEnable();
-
-    // Set GPIO pins as UART pins.
+// Initialize UART0 for local terminal
+void InitializeUART0LocalTerminal() {
+    GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
     GPIOPinConfigure(GPIO_PA0_U0RX);
     GPIOPinConfigure(GPIO_PA1_U0TX);
-    ROM_GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
-
-    GPIOPinConfigure(GPIO_PB0_U1RX);
-    GPIOPinConfigure(GPIO_PB1_U1TX);
-    ROM_GPIOPinTypeUART(GPIO_PORTB_BASE, GPIO_PIN_0 | GPIO_PIN_1);
-
-    // Configure UARTs.
-    ROM_UARTConfigSetExpClk(UART0_BASE, ROM_SysCtlClockGet(), 115200,
-                            (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE |
-                             UART_CONFIG_PAR_NONE));
-    ROM_UARTConfigSetExpClk(UART1_BASE, ROM_SysCtlClockGet(), 9600,
-                            (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE |
-                             UART_CONFIG_PAR_NONE));
-
-    // Enable UART FIFOs.
-    ROM_UARTFIFOEnable(UART0_BASE);
-    ROM_UARTFIFOEnable(UART1_BASE);
-
-    // Enable UART interrupts.
-    ROM_IntEnable(INT_UART0);
-    ROM_UARTIntEnable(UART0_BASE, UART_INT_RX | UART_INT_RT);
-
-    ROM_IntEnable(INT_UART1);
-    ROM_UARTIntEnable(UART1_BASE, UART_INT_RX | UART_INT_RT);
-
-    // Enable UARTs.
-    ROM_UARTEnable(UART0_BASE);
-    ROM_UARTEnable(UART1_BASE);
+    UARTStdioConfig(0, 115200, SysCtlClockGet());
 }
 
-//*****************************************************************************
-//
-// PWM Setup
-//
-//*****************************************************************************
-void PWM_init(void){
-  // Set the PWM clock divider to 64
-  SysCtlPWMClockSet(SYSCTL_PWMDIV_64);
-
-  // Enable PWM module 1
-  SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM1);
-
-  // Wait until the PWM1 module is ready
-  while(!SysCtlPeripheralReady(SYSCTL_PERIPH_PWM1)) {};
-
-  // Enable GPIO port F used for on-board LED (PF1)
-  SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
-  while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF)) {};
-
-  // Configure PF1 for PWM output (M1PWM5)
-  GPIOPinConfigure(GPIO_PF1_M1PWM5);
-  GPIOPinTypePWM(GPIO_PORTF_BASE, GPIO_PIN_1);
-
-  // Divide by 64 since SYSCTL_PWMDIV_64 was used
-  uint32_t PWM_clock = SysCtlClockGet() / 64;
-  uint32_t PWM_freq = 1000; // 1000 Hz
-  uint32_t Load = (PWM_clock / PWM_freq) - 1;
-
-  // Set the period for PWM generator 2 (which controls M1PWM5)
-  PWMGenPeriodSet(PWM1_BASE, PWM_GEN_2, Load);
-
-  // Configure PWM generator 2 for down-count mode and no synchronization
-  PWMGenConfigure(PWM1_BASE, PWM_GEN_2, PWM_GEN_MODE_DOWN | PWM_GEN_MODE_NO_SYNC);
-
-  // Enable PWM generator 2
-  PWMGenEnable(PWM1_BASE, PWM_GEN_2);
-
-  // Set initial PWM pulse width to 0% duty cycle (LED off)
-  PWMPulseWidthSet(PWM1_BASE, PWM_OUT_5, 0);
-
-  // Enable PWM output on M1PWM5 (PF1)
-  PWMOutputState(PWM1_BASE, PWM_OUT_5_BIT, true);
+// Initialize Timer 0
+void InitializeTimer0() {
+    TimerConfigure(WTIMER0_BASE, TIMER_CFG_ONE_SHOT_UP);
+    TimerLoadSet(WTIMER0_BASE, TIMER_A, 0xFFFFFFFF);
+    TimerEnable(WTIMER0_BASE, TIMER_A);
 }
 
-//*****************************************************************************
-//
-// ADC Setup
-//
-//*****************************************************************************
-void ADC_init(void){
-  // Enable the ADC peripheral
-  SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC0);
-
-  // Wait for the ADC module to be ready
-  while(!SysCtlPeripheralReady(SYSCTL_PERIPH_ADC0)) {};
-
-  // Enable GPIO Port E
-  SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
-  while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE)) {};
-
-  // Enable GPIO Port F for LEDs
-  SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
-  while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF)) {};
-
-  GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3);
-
-  // Configure PE3 as ADC input (AIN0)
-  GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_3);
-
-  // Disable ADC Sequence 3 before configuring
-  ADCSequenceDisable(ADC0_BASE, 3);
-
-  // Configure ADC Sequence 3
-  ADCSequenceConfigure(ADC0_BASE, 3, ADC_TRIGGER_PROCESSOR, 0);
-  ADCSequenceStepConfigure(ADC0_BASE, 3, 0, ADC_CTL_IE | ADC_CTL_END | ADC_CTL_CH0);
-
-  // Enable ADC Sequence 3
-  ADCSequenceEnable(ADC0_BASE, 3);
-
-  // Enable ADC interrupt for Sequence 3
-  ADCIntEnable(ADC0_BASE, 3);
-  ADCIntRegister(ADC0_BASE, 3, &ADCSeq_IntHandler);
+// Initialize Timer 1
+void InitializeTimer1() {
+    TimerConfigure(WTIMER1_BASE, TIMER_CFG_A_PERIODIC);
+    TimerIntEnable(WTIMER1_BASE, TIMER_TIMA_TIMEOUT);
+    TimerLoadSet(WTIMER1_BASE, TIMER_A, SysCtlClockGet() * 0.5);  // Adjust as necessary
+    TimerEnable(WTIMER1_BASE, TIMER_A);
 }
 
-
-
-//*****************************************************************************
-//
-// Main function.
-//
-//*****************************************************************************
-int main(void)
-{
-    // Enable lazy stacking for interrupt handlers.
-    ROM_FPUEnable();
-    ROM_FPULazyStackingEnable();
-
-    // Set the clocking to run directly from the crystal.
-    //ROM_SysCtlClockSet(SYSCTL_SYSDIV_1 | SYSCTL_USE_OSC | SYSCTL_OSC_MAIN |
-    //                   SYSCTL_XTAL_40MHZ);
-
-    UART_init();
-    // PWM_init();
-    ADC_init();
-
-    // Enable the GPIO pins for the LEDs (PF1 to PF3).
-    //ROM_GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3);
-
-    // maybe delete
-    if(!SysCtlPeripheralReady(SYSCTL_PERIPH_PWM1));
-    {
-    }
-
-    // Set initial LED state to red.
-    //GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_PIN_1);
-
-    // Prompt for text to be entered.
-    UARTSend((uint8_t *)"Please enter characters in the remote Bluetooth Serial Terminal and see the color change: ", 90);
-    UART1_Send((uint8_t *)"Please enter 3-letter commands: ", 32);
-
-    // Loop forever.
-    while(1)
-    {
-        if(strlen(inputStr) == 3){
-            inputStr[3] = '\0';
-            UARTSend((uint8_t *)"\nCOMMAND IS ", 13);
-            UARTSend((uint8_t *)inputStr, 3);
-
-            // Search in the CmdLookup table
-            int i;
-            bool matched = false;
-            for(i = 0; i < sizeof(cmdLookUp) / sizeof(cmdLookUp[0]); i++){
-                if(!strncmp(inputStr, cmdLookUp[i].cmd, 3)) {
-                    UARTSend((uint8_t *)"\nMatched command: ", 19);
-                    UART1_Send((uint8_t *)"\nMatched command: ", 19);
-                    cmdLookUp[i].fp();
-                    matched = true;
-                    break;
-                }
-            }
-
-            // if command was not found in table, give warning
-            if(!matched){
-                UARTSend((uint8_t *)"\nWARNING: command not found ", 29);
-                UART1_Send((uint8_t *)"\nWARNING: command not found ", 29);
-            }
-
-            memset(inputStr, 0, sizeof(inputStr));
-        }
-    }
+// Initialize GPIO A interrupt for the reflectance sensor
+void InitializeGPIOAInterrupt() {
+    GPIOIntEnable(GPIO_PORTA_BASE, GPIO_INT_PIN_4);
+    GPIOIntTypeSet(GPIO_PORTA_BASE, GPIO_PIN_4, GPIO_FALLING_EDGE);
 }
 
-    void FWD(void){
-        UARTSend((uint8_t *)"Move Forward\n", 14);
-        UART1_Send((uint8_t *)"Move Forward\n", 14);
-    }
+// Main function
+int main(void) {
+    // Run system clock at 40 MHz
+    SysCtlClockSet(SYSCTL_SYSDIV_5 | SYSCTL_USE_PLL | SYSCTL_OSC_MAIN | SYSCTL_XTAL_16MHZ);
 
-    void BWD(void){
-        UARTSend((uint8_t *)"Move Backward\n", 15);
-        UART1_Send((uint8_t *)"Move Backward\n", 15);
-    }
+    IntMasterEnable();
 
-    void LFT(void){
-        UARTSend((uint8_t *)"Move Left\n", 11);
-        UART1_Send((uint8_t *)"Move Left\n", 11);
-    }
+    EnablePeripherals();
+    InitializeUART0LocalTerminal();
+    InitializeTimer0();
+    InitializeTimer1();
+    InitializeGPIOAInterrupt();
 
-    void RGT(void){
-        UARTSend((uint8_t *)"Move Right\n", 12);
-        UART1_Send((uint8_t *)"Move Right\n", 12);
-    }
+    // Initialize the LEDs on Port F
+    GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3);  // PF1 = RED, PF2 = BLUE, PF3 = GREEN
 
-    void PWM(void)
-    {
-        UARTSend((uint8_t *)"PWM of LED\n", 11);
-        UART1_Send((uint8_t *)"PWM of LED\n", 11);
+    // Start initial timer counts
+    startCount = TimerValueGet(WTIMER0_BASE, TIMER_A);
+    SysCtlDelay(SysCtlClockGet() / 3 * 4);
+    endCount = TimerValueGet(WTIMER0_BASE, TIMER_A);
 
-        uint32_t period = PWMGenPeriodGet(PWM1_BASE, PWM_GEN_2);
-        uint32_t dutyCycle = 0;
-        uint32_t step = 1;
-        uint32_t delayFactor = 1000;
+    uint64_t elapsedCount = endCount - startCount;
+    UARTprintf("Main Program is running!\n");
 
-        while(1)
-        {
-            // Ramp up
-            for (dutyCycle = 0; dutyCycle < period; dutyCycle += step)
-            {
-                PWMPulseWidthSet(PWM1_BASE, PWM_OUT_5, dutyCycle);
-                SysCtlDelay(SysCtlClockGet() / delayFactor);
-            }
+    // Start BIOS
+    BIOS_start();
 
-            // Ramp down
-            for (dutyCycle = period; dutyCycle > 0; dutyCycle -= step)
-            {
-                PWMPulseWidthSet(PWM1_BASE, PWM_OUT_5, dutyCycle);
-                SysCtlDelay(SysCtlClockGet() / delayFactor);
-            }
-        }
-    }
-
-    void ADC_req(void){
-      ADCProcessorTrigger(ADC0_BASE, 3);
-    }
+    return (0);
+}
